@@ -41,7 +41,34 @@ static slirp_ssize_t receive(const void *data, size_t n, void *unused) {
   memcpy(queue[i].data, data, n);
   return n;
 }
+// The host name option (12) of the last DHCP message the client sent; -1 without one.
+static char sent_name[256];
+static int sent_name_len = -1, dhcp_messages;
+static void inspect_dhcp(const unsigned char *f, size_t n) {
+  if (n < 14 + 20 + 8 + 240 || f[12] != 8 || f[13] != 0 || f[23] != 17)
+    return;
+  size_t udp = 14 + (f[14] & 15) * 4;
+  if (udp + 8 + 240 > n || f[udp + 2] != 0 || f[udp + 3] != 67)
+    return;
+  dhcp_messages++;
+  sent_name_len = -1;
+  // Options follow BOOTP's 236 fixed bytes and the 4-byte magic cookie.
+  for (size_t o = udp + 8 + 240; o < n && f[o] != 255;) {
+    if (!f[o]) {
+      o++;
+      continue;
+    }
+    if (o + 2 > n || o + 2 + f[o + 1] > n)
+      return;
+    if (f[o] == 12) {
+      sent_name_len = f[o + 1];
+      memcpy(sent_name, f + o + 2, f[o + 1]);
+    }
+    o += 2 + f[o + 1];
+  }
+}
 int radio_l2_send(const unsigned char *data, size_t n) {
+  inspect_dhcp(data, n);
   slirp_input(net, data, n);
   return 0;
 }
@@ -83,7 +110,7 @@ int radio_l2_recv(unsigned char *out, size_t capacity) {
   return queue[i].len;
 }
 int station_net_join(const unsigned char *), station_net_uuid(unsigned char *);
-void station_net_close(void);
+void station_net_close(void), station_net_hostname(const unsigned char *, unsigned);
 int main(void) {
   SlirpConfig conf = {
       .version = 6, .in_enabled = true, .disable_host_loopback = true};
@@ -107,7 +134,21 @@ int main(void) {
     fputs("DHCP failed\n", stderr);
     return 2;
   }
-  puts("Moto IP client acquired DHCP lease on test Ethernet");
+  if (!dhcp_messages || sent_name_len != -1) {
+    fputs("DHCP sent a host name without one being set\n", stderr);
+    return 4;
+  }
+  static const char name[] = "violet-test";
+  station_net_hostname((const unsigned char *)name, sizeof name - 1);
+  if (!station_net_join(mac)) {
+    fputs("DHCP failed with a host name\n", stderr);
+    return 2;
+  }
+  if (sent_name_len != sizeof name - 1 || memcmp(sent_name, name, sizeof name - 1)) {
+    fputs("DHCP did not carry the host name\n", stderr);
+    return 5;
+  }
+  puts("Moto IP client acquired DHCP lease on test Ethernet, naming itself only when a host name is set");
   fflush(stdout);
   int ok = station_net_uuid(id);
   station_net_close();

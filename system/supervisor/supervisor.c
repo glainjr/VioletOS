@@ -498,6 +498,10 @@ static unsigned profile_length, profile_transaction, profile_epoch;
 static unsigned long long profile_ticks;
 static bool profile_pending, profile_ready;
 static unsigned join_job;
+// Optional join settings from USB, also only in RAM: a fixed station address in
+// place of the random one, and a DHCP host name. Zero and empty keep the defaults.
+static unsigned char station_address[6], station_hostname[32];
+static unsigned station_hostname_length;
 static unsigned char package_signature[72];
 static bool signature_started, package_authorized;
 static bool signed_update(unsigned size) {
@@ -1778,6 +1782,26 @@ void root_main(seL4_BootInfo *bi) {
           seL4_SetMR(0, ok ? 0 : 2);
           IPC_REPLY(root_reply, seL4_MessageInfo_new(0,0,0,1));
           continue;
+        } else if (key == 0x6f) {
+          // A unicast station address (zero: none), then a host name of letters, digits and inner hyphens.
+          unsigned words[10];
+          for (unsigned i = 0; i < 10; ++i) words[i] = seL4_GetMR(4+i);
+          const unsigned char *bytes = (const unsigned char *)words;
+          ok = n >= 6 && n <= 6 + sizeof(station_hostname) && !(bytes[0] & 1);
+          for (unsigned i = 6; ok && i < n; ++i) {
+            unsigned char c = bytes[i];
+            ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                 (c == '-' && i > 6 && i + 1 < n);
+          }
+          if (ok) {
+            memcpy(station_address, bytes, 6);
+            memcpy(station_hostname, bytes + 6, n - 6);
+            station_hostname_length = n - 6;
+          }
+          for (unsigned i = 0; i < 14; ++i) seL4_SetMR(i, 0);
+          seL4_SetMR(0, ok ? 0 : 2);
+          IPC_REPLY(root_reply, seL4_MessageInfo_new(0,0,0,1));
+          continue;
         } else if (key == 0x66 || key == 0x67) {
           unsigned words[10];
           for (unsigned i=0; i<10; i++) words[i]=seL4_GetMR(4+i);
@@ -1886,6 +1910,15 @@ void root_main(seL4_BootInfo *bi) {
         seL4_SetMR(0,ok ? 0 : 3);
         IPC_REPLY(root_reply, seL4_MessageInfo_new(0,0,0,14));
         continue;
+      }
+      if (badge == RADIO && op == GET && key == 0x4061 &&
+          seL4_MessageInfo_get_length(msg) == 14) {
+        unsigned words[10]={0};
+        memcpy(words,station_address,6);
+        memcpy((unsigned char *)words+6,station_hostname,station_hostname_length);
+        seL4_SetMR(0,0);seL4_SetMR(2,station_hostname_length);seL4_SetMR(3,0);
+        for(unsigned i=0;i<10;i++) seL4_SetMR(4+i,words[i]);
+        IPC_REPLY(root_reply, seL4_MessageInfo_new(0,0,0,14));continue;
       }
 #endif
       for (unsigned i = 0; i < 14; i++)

@@ -26,6 +26,8 @@ static unsigned request_start;
 static int established, failed, eof, initialized, attached, dns_state;
 static ip_addr_t destination;
 static unsigned char frame[1518];
+// The name sent with DHCP requests. Empty by default: no name is sent.
+static char hostname[33];
 u32_t sys_now(void) { return radio_monotonic_ms(); }
 unsigned radio_ip_random(void) {
   unsigned v = 0;
@@ -170,6 +172,12 @@ void station_net_close(void) {
   }
   hosting = leased = 0;
 }
+void station_net_hostname(const unsigned char *name, unsigned n) {
+  if (n >= sizeof(hostname))
+    n = 0;
+  memcpy(hostname, name, n);
+  hostname[n] = 0;
+}
 void station_net_relay_password(const unsigned char *p, unsigned n) {
   if (n > sizeof(relay_password))
     n = sizeof(relay_password);
@@ -223,6 +231,7 @@ int station_net_join(const unsigned char *mac) {
     return 0;
   attached = 1;
   memcpy(iface.hwaddr, mac, 6);
+  netif_set_hostname(&iface, hostname[0] ? hostname : NULL);
   netif_set_default(&iface);
   netif_set_up(&iface);
   netif_set_link_up(&iface);

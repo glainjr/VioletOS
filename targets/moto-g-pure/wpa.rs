@@ -226,6 +226,7 @@ pub unsafe fn host_ip(dev: *mut Axi, password: &[u8]) -> bool {
 extern "C" {
     fn station_net_close();
     fn station_net_join(mac: *const u8) -> i32;
+    fn station_net_hostname(name: *const u8, n: u32);
     fn station_net_poll();
     fn station_net_uuid(out: *mut u8) -> i32;
 }
@@ -310,6 +311,11 @@ pub unsafe fn join_ip(dev: *mut Axi) -> bool {
     LINK_ERROR = false;
     TX_FAILURES = 0;
     let mac = (*dev).station;
+    // The host name provisioned over USB with the fixed address (VIOLET_HOSTNAME); none by default.
+    let options = Message::new(GET, 0x4061, 0).call(7);
+    let name = options.text();
+    let n = if options.op == OK { options.value.min(32) } else { 0 };
+    station_net_hostname(name[6..].as_ptr(), n);
     station_net_join(mac.as_ptr()) != 0 && !LINK_ERROR
 }
 pub unsafe fn close() {

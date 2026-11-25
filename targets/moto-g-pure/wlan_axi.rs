@@ -270,6 +270,9 @@ impl Axi {
                 return Err(45);
             }
             let mut mac: [u8; 6] = event[20..26].try_into().unwrap();
+            if let Some(fixed) = super::radio_io::fixed_address() {
+                return Ok(fixed);
+            }
             if mac == [0; 6] || mac[0] & 1 != 0 {
                 // Ellis can provide the permanent address outside the NIC.
                 // Configure a locally administered unicast address for this session.

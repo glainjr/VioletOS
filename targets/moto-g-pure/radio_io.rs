@@ -1,5 +1,5 @@
 //! Hardware access shared by the two sides of the MT6765 radio.
-use crate::protocol::{ticks, ticks_per_ms};
+use crate::protocol::{ticks, ticks_per_ms, Message, GET, OK};
 pub fn rd(addr: usize) -> u32 {
     unsafe { (addr as *const u32).read_volatile() }
 }
@@ -34,6 +34,15 @@ pub fn trace(slot: usize, value: u32) {
             .add(35 + slot)
             .write_volatile(value)
     }
+}
+
+/// The station address provisioned over USB for this boot (moto-wifi-profile
+/// with VIOLET_FIXED_MAC). Without one the address stays as it was: the chip's,
+/// or a random one for each session.
+pub fn fixed_address() -> Option<[u8; 6]> {
+    let r = Message::new(GET, 0x4061, 0).call(7);
+    let mac: [u8; 6] = r.data[..6].try_into().unwrap();
+    (r.op == OK && mac != [0; 6] && mac[0] & 1 == 0).then_some(mac)
 }
 
 pub fn address_entropy(mac: &mut [u8; 6]) -> bool {

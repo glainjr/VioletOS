@@ -22,6 +22,7 @@ pub struct Model {
     pub drop_scan_done: bool,
     pub no_ack: bool,
     pub invalid_mac: bool,
+    pub fixed_mac: Option<[u8; 6]>,
     pub deny_association: bool,
     pub wrong_channel: bool,
     pub drop_key_done: bool,
@@ -152,7 +153,7 @@ impl Model {
             }
             self.inject(1, &reply);
         } else if bytes[36] == 0x11 {
-            let expected = if self.invalid_mac { [0xfe, 1, 2, 3, 4, 5] } else { [2, 17, 34, 51, 68, 85] };
+            let expected = self.fixed_mac.unwrap_or(if self.invalid_mac { [0xfe, 1, 2, 3, 4, 5] } else { [2, 17, 34, 51, 68, 85] });
             assert_eq!(bytes[68..74], expected);
         } else if bytes[36] == 3 {
             assert_eq!(bytes.len(), 1252);
@@ -210,6 +211,9 @@ pub fn put(a: usize, b: u8) {
             m.bytes.insert(a, b);
         }
     });
+}
+pub fn fixed_address() -> Option<[u8; 6]> {
+    with(|m| m.fixed_mac)
 }
 pub fn address_entropy(mac: &mut [u8; 6]) -> bool {
     *mac = [0xff, 1, 2, 3, 4, 5];

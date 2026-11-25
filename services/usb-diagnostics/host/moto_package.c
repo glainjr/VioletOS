@@ -71,7 +71,7 @@ int main(int argc,char **argv) {
     int diagnostics = argc == 3 && !strcmp(argv[1], "activate-diagnostics");
     int confirm = argc == 3 && !strcmp(argv[1], "confirm-diagnostics");
     int activate = radio || diagnostics;
-    if((argc!=2 && !activate && !confirm) || (!strcmp(argv[1],"--help"))){fputs("moto-package status | radio-state | stopwatch | provision-wpa2 | join-wifi | scan-wifi | reboot | reboot-bootloader | bt-state | audio-status | audio=HEX | camera-status | camera=HEX | camera-shot=FILE.pgm | camera-raw=FILE | open-log | open-run=PATH | open-push=NAME | screenshot[=SCALE] | FILE.vpk | activate-radio SIGNATURE | activate-diagnostics SIGNATURE | diagnostics-status | diagnostics-recovery | confirm-diagnostics GENERATION\n",stderr);return 2;}
+    if((argc!=2 && !activate && !confirm) || (!strcmp(argv[1],"--help"))){fputs("moto-package status | radio-state | stopwatch | provision-wpa2 | join-options | join-wifi | scan-wifi | reboot | reboot-bootloader | bt-state | audio-status | audio=HEX | camera-status | camera=HEX | camera-shot=FILE.pgm | camera-raw=FILE | open-log | open-run=PATH | open-push=NAME | screenshot[=SCALE] | FILE.vpk | activate-radio SIGNATURE | activate-diagnostics SIGNATURE | diagnostics-status | diagnostics-recovery | confirm-diagnostics GENERATION\n",stderr);return 2;}
     libusb_context *ctx;
     if(libusb_init(&ctx)<0)return 1;
     libusb_device **devices;
@@ -119,6 +119,11 @@ int main(int argc,char **argv) {
                    transfer(chosen,0x40,0x6b,word(payload),payload+37,36);
             }
             for (size_t i=0;i<sizeof payload;i++) ((volatile unsigned char *)payload)[i]=0;
+        } else if (!strcmp(argv[1],"join-options")) {
+            // For this boot: a station address (6; zero keeps the random one), then a host name (0-32).
+            unsigned char options[39];
+            size_t n=fread(options,1,sizeof options,stdin);
+            if (n>=6 && n<=38) rc=transfer(chosen,0x40,0x6f,0,options,(uint16_t)n);
         } else if (!strcmp(argv[1],"radio-state")) {
             // Radio's progress words 5-15; word 10 is its stage (70-73: rejoining Wi-Fi).
             unsigned char r[52];

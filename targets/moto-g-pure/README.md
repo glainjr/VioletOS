@@ -132,6 +132,8 @@ The current build ships [USB Diagnostics](../../services/usb-diagnostics/README.
 
 `moto-wifi-profile --save` keeps the network name and derived WPA2 key (not the password) in `~/.config/violetos/wifi-profile.json`, readable only by you; `moto-flash` provisions it after every flash, and `moto-wifi-profile --saved` does so after any other reboot. DHCP may take up to 30 s.
 
+By default the phone joins with a random Wi-Fi address for each radio session and gives the network no name, so a router lists it as a new, unnamed device each time. Two environment variables for `moto-wifi-profile` change that for the current boot: `VIOLET_FIXED_MAC` (for example `02:11:22:33:44:55`) is the address the phone uses instead, and `VIOLET_HOSTNAME` is the name it sends with its DHCP requests. `VIOLET_SSID` and `VIOLET_WIFIPASS` answer the script's two questions the same way. `--save` keeps both settings with the profile.
+
 Radio also serves open apps' TCP sockets from its event loop (see the [Open Runtime](../../runtime/open/README.md#how-it-works)). A USB join now tries every access point broadcasting the network name, 2.4 GHz first, and a join of an ordinary network while hosting the relay stops hosting first.
 
 Radio can host a Wi-Fi network for a phone running the [companion relay](../../companion/ios/README.md) and reach the internet over the phone's cellular data. Run `services/usb-diagnostics/host/moto-relay` from the Mac. It provisions a one-boot profile named `VioletRelay-XXXX` (WPA2-PSK) or, with `--open`, `VioletRelayOpen-XXXX`. It writes the SSID, passphrase and SOCKS password to `build/relay-pairing.json`, then asks Radio to host the network. A join request whose network name starts with `VioletRelay` hosts that network instead of joining one.

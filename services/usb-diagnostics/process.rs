@@ -401,7 +401,8 @@ pub fn run() -> ! {
                 install_out=Some((usize::from(lo)|(usize::from(hi)<<16),usize::from(len),0));
                 put_half(CSR,0x40);
             }
-            (0x40, key @ (0x49|0x4a|0x4c|0x60|0x61|0x66|0x67|0x6a|0x6b), lo, hi) if configuration==1
+            // 0x6f: join options for the supervisor (a station address, then a host name).
+            (0x40, key @ (0x49|0x4a|0x4c|0x60|0x61|0x66|0x67|0x6a|0x6b|0x6f), lo, hi) if configuration==1
                 && (if key==0x60 {len==4} else {(1..=40).contains(&len)}) => {
                 pending_out=Some((u32::from(key),u32::from(lo)|(u32::from(hi)<<16),usize::from(len)));
                 put_half(CSR,0x40);

@@ -223,6 +223,29 @@ fn register_level_scan_and_dma_timeout_paths() {
 }
 
 #[test]
+fn provisioned_address_replaces_the_chip_and_random_ones() {
+    for (invalid_mac, fixed_mac, expected) in [
+        (false, None, [2, 17, 34, 51, 68, 85]),
+        (true, None, [0xfe, 1, 2, 3, 4, 5]),
+        (false, Some([2, 0xaa, 0xbb, 0xcc, 0xdd, 0xee]), [2, 0xaa, 0xbb, 0xcc, 0xdd, 0xee]),
+        (true, Some([2, 0xaa, 0xbb, 0xcc, 0xdd, 0xee]), [2, 0xaa, 0xbb, 0xcc, 0xdd, 0xee]),
+    ] {
+        radio_io::reset();
+        radio_io::wr(0x09011208, 0x10001870);
+        radio_io::with(|m| {
+            m.invalid_mac = invalid_mac;
+            m.fixed_mac = fixed_mac;
+        });
+        let mut axi = wlan_axi::Axi::new();
+        let mut results = passive_scan::Results::default();
+        let (p, n) = entry(3);
+        axi.scan(&FACTORY[p..p + n], &mut results, |_| {}).unwrap();
+        assert_eq!(axi.station, expected);
+        assert!(axi.shutdown());
+    }
+}
+
+#[test]
 fn associates_only_on_selected_channel_with_confirmed_aid() {
     for (wrong_channel, denied, expected) in [
         (false, false, Ok(3)),
