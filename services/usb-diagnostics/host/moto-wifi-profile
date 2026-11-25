@@ -10,18 +10,19 @@
 provisions it after every flash. Delete the file to forget the network.
 
 Environment variables answer the questions and set two optional join settings.
-Both settings are off unless set, last for this boot like the profile, and are
-kept by --save:
+Both settings last for this boot like the profile, and are kept by --save:
 
     VIOLET_SSID, VIOLET_WIFIPASS   the network name and password
     VIOLET_FIXED_MAC               the phone's Wi-Fi address, such as 02:11:22:33:44:55,
                                    in place of a random one for each radio session
     VIOLET_HOSTNAME                the name the phone gives the network with DHCP
+    VIOLET_IS_PRIVATE_CLIENT       0, no, false, off or disable to use the two above
 
 A fixed address and a name let every network the phone joins know it again,
-which RFC 7844 advises a private client against. VIOLET_IS_PRIVATE_CLIENT (1,
-yes, true, on or enable) overrides both, set here or kept with the profile:
-the phone joins under a random address and gives no name.
+which RFC 7844 advises a private client against. The phone is a private client
+unless VIOLET_IS_PRIVATE_CLIENT says otherwise: it joins under a random address
+and gives no name, whatever the other two say. --save keeps the choice, and the
+variable (1, yes, true, on or enable for private) overrides the kept one.
 """
 import argparse
 import getpass
@@ -46,12 +47,14 @@ def provision(ssid, pmk):
     subprocess.run([tool, "provision-wpa2"], input=record, check=True)
 
 
-def truthy(name):
-    """An on/off environment variable. Unset or empty is off."""
+def truthy(name, default):
+    """An on/off environment variable. Unset or empty is the default."""
     value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
     if value in ("1", "yes", "true", "on", "enable", "enabled"):
         return True
-    if value in ("", "0", "no", "false", "off", "disable", "disabled"):
+    if value in ("0", "no", "false", "off", "disable", "disabled"):
         return False
     raise SystemExit(f"{name} must be 1, yes, true, on or enable, or 0, no, false, off or disable")
 
@@ -73,10 +76,19 @@ def join_options():
 def provision_options(mac, hostname, private):
     tool = Path(__file__).resolve().parents[3] / "build/moto-package"
     if private:
+        if mac or hostname:
+            print("Private client: the fixed address and host name are not used. "
+                  "VIOLET_IS_PRIVATE_CLIENT=0 uses them.", file=sys.stderr)
         # Zero and empty also clear an address and a name set earlier in this boot.
         if subprocess.run([tool, "join-options"], input=bytes(6)).returncode:
-            raise SystemExit("The handset did not confirm that it holds no fixed address or host name "
-                             "(an older VioletOS image has neither)")
+            unconfirmed = ("The handset did not confirm that it holds no fixed address or host name "
+                           "(an older VioletOS image has neither)")
+            # Asked for by name, privacy must be confirmed. As the default, it must
+            # not stop a join on an image from before the two settings.
+            if os.environ.get("VIOLET_IS_PRIVATE_CLIENT", "").strip():
+                raise SystemExit(unconfirmed)
+            print(unconfirmed, file=sys.stderr)
+            return
         print("Private client: a random address for each radio session and no host name.")
         return
     if not mac and not hostname:
@@ -93,11 +105,11 @@ def main():
     parser.add_argument("--save", action="store_true", help="keep the profile on this Mac")
     parser.add_argument("--saved", action="store_true", help="provision the kept profile")
     args = parser.parse_args()
-    private = truthy("VIOLET_IS_PRIVATE_CLIENT")
     if args.saved:
         if not SAVED.exists():
             raise SystemExit(f"No saved Wi-Fi profile ({SAVED}); run moto-wifi-profile --save once")
         saved = json.loads(SAVED.read_text())
+        private = truthy("VIOLET_IS_PRIVATE_CLIENT", saved.get("private", True))
         provision(saved["ssid"].encode("utf-8"), bytes.fromhex(saved["pmk"]))
         print(f"Saved profile for {saved['ssid']} provisioned for this boot.")
         provision_options(saved.get("mac", ""), saved.get("hostname", ""), private)
@@ -105,7 +117,8 @@ def main():
     if not sys.stdin.isatty():
         raise SystemExit("Run from an interactive terminal to enter a Wi-Fi passphrase privately")
     warnings.simplefilter("error", getpass.GetPassWarning)
-    mac, hostname = ("", "") if private else join_options()
+    private = truthy("VIOLET_IS_PRIVATE_CLIENT", True)
+    mac, hostname = join_options()
 
     sys.stderr.write("Automate wifi setup - shell source a file that contains VIOLET_SSID=<ssid> VIOLET_WIFIPASS=<password> to automate wifi setup\n")
 
@@ -128,7 +141,8 @@ def main():
         fd = os.open(SAVED, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump({"ssid": ssid.decode("utf-8"), "pmk": pmk.hex(),
-                       **({"mac": mac} if mac else {}), **({"hostname": hostname} if hostname else {})}, f)
+                       **({} if private else {"private": False, **({"mac": mac} if mac else {}),
+                                              **({"hostname": hostname} if hostname else {})})}, f)
         os.chmod(SAVED, 0o600)
         print(f"Saved for later flashes in {SAVED} (name and derived key, readable only by you).")
 
