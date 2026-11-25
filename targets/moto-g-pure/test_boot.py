@@ -37,7 +37,9 @@ with TemporaryDirectory() as tmp:
     out = Path(tmp)
     # Relink the Moto loader with a kernel built for the virtual GIC.
     commands = subprocess.check_output(["ninja", "-C", qemu / "kernel", "-t", "commands", "sel4"], text=True)
-    cc = Path(shlex.split(next(line for line in commands.splitlines() if " -c " in line))[0])
+    # The first word is ccache when it is installed (see platform/sel4/loader/build.py).
+    cc = Path(next(word for word in shlex.split(next(line for line in commands.splitlines() if " -c " in line))
+                   if Path(word).name.startswith("clang")))
     ld, objcopy = cc.with_name("ld.lld"), cc.with_name("llvm-objcopy")
     def run(*args):
         subprocess.run(args, cwd=out, check=True)

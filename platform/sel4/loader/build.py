@@ -19,7 +19,8 @@ if probe:
     shutil.copyfile(out.parent/"handoff.dtb",out/"handoff.dtb")
 line = next(s for s in subprocess.check_output(["ninja","-C",abi,"-t","commands","sel4"],text=True).splitlines() if " -c " in s and s.endswith("/sel4_bootinfo.c"))
 args = shlex.split(line)
-cc = Path(args[0])
+# seL4's toolchain file runs the compiler through ccache when it is installed.
+cc = Path(next(a for a in args if Path(a).name.startswith("clang")))
 ld = cc.with_name("ld.lld")
 objcopy = cc.with_name("llvm-objcopy")
 common = [cc,"--target=arm-none-eabi","-mcpu=cortex-a53","-marm","-mfloat-abi=soft","-Oz","-ffreestanding","-fno-builtin","-fno-stack-protector","-fno-unwind-tables","-fno-pic","-mno-unaligned-access","-ffunction-sections","-fdata-sections"]
