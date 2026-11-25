@@ -17,6 +17,11 @@ kept by --save:
     VIOLET_FIXED_MAC               the phone's Wi-Fi address, such as 02:11:22:33:44:55,
                                    in place of a random one for each radio session
     VIOLET_HOSTNAME                the name the phone gives the network with DHCP
+
+A fixed address and a name let every network the phone joins know it again,
+which RFC 7844 advises a private client against. VIOLET_IS_PRIVATE_CLIENT (1,
+yes, true, on or enable) overrides both, set here or kept with the profile:
+the phone joins under a random address and gives no name.
 """
 import argparse
 import getpass
@@ -41,6 +46,16 @@ def provision(ssid, pmk):
     subprocess.run([tool, "provision-wpa2"], input=record, check=True)
 
 
+def truthy(name):
+    """An on/off environment variable. Unset or empty is off."""
+    value = os.environ.get(name, "").strip().lower()
+    if value in ("1", "yes", "true", "on", "enable", "enabled"):
+        return True
+    if value in ("", "0", "no", "false", "off", "disable", "disabled"):
+        return False
+    raise SystemExit(f"{name} must be 1, yes, true, on or enable, or 0, no, false, off or disable")
+
+
 def join_options():
     """VIOLET_FIXED_MAC and VIOLET_HOSTNAME, checked; unset or empty leaves a setting off."""
     mac, hostname = os.environ.get("VIOLET_FIXED_MAC", ""), os.environ.get("VIOLET_HOSTNAME", "")
@@ -55,10 +70,17 @@ def join_options():
     return mac, hostname
 
 
-def provision_options(mac, hostname):
+def provision_options(mac, hostname, private):
+    tool = Path(__file__).resolve().parents[3] / "build/moto-package"
+    if private:
+        # Zero and empty also clear an address and a name set earlier in this boot.
+        if subprocess.run([tool, "join-options"], input=bytes(6)).returncode:
+            raise SystemExit("The handset did not confirm that it holds no fixed address or host name "
+                             "(an older VioletOS image has neither)")
+        print("Private client: a random address for each radio session and no host name.")
+        return
     if not mac and not hostname:
         return
-    tool = Path(__file__).resolve().parents[3] / "build/moto-package"
     record = bytes.fromhex(mac.replace(":", "") or "00" * 6) + hostname.encode("ascii")
     if subprocess.run([tool, "join-options"], input=record).returncode:
         raise SystemExit("The handset did not accept the fixed address and host name (an older VioletOS image?)")
@@ -71,18 +93,19 @@ def main():
     parser.add_argument("--save", action="store_true", help="keep the profile on this Mac")
     parser.add_argument("--saved", action="store_true", help="provision the kept profile")
     args = parser.parse_args()
+    private = truthy("VIOLET_IS_PRIVATE_CLIENT")
     if args.saved:
         if not SAVED.exists():
             raise SystemExit(f"No saved Wi-Fi profile ({SAVED}); run moto-wifi-profile --save once")
         saved = json.loads(SAVED.read_text())
         provision(saved["ssid"].encode("utf-8"), bytes.fromhex(saved["pmk"]))
         print(f"Saved profile for {saved['ssid']} provisioned for this boot.")
-        provision_options(saved.get("mac", ""), saved.get("hostname", ""))
+        provision_options(saved.get("mac", ""), saved.get("hostname", ""), private)
         return
     if not sys.stdin.isatty():
         raise SystemExit("Run from an interactive terminal to enter a Wi-Fi passphrase privately")
     warnings.simplefilter("error", getpass.GetPassWarning)
-    mac, hostname = join_options()
+    mac, hostname = ("", "") if private else join_options()
 
     sys.stderr.write("Automate wifi setup - shell source a file that contains VIOLET_SSID=<ssid> VIOLET_WIFIPASS=<password> to automate wifi setup\n")
 
@@ -99,7 +122,7 @@ def main():
     pmk = hashlib.pbkdf2_hmac("sha1", password, ssid, 4096, 32)
     provision(ssid, pmk)
     print("Profile provisioned for this boot.")
-    provision_options(mac, hostname)
+    provision_options(mac, hostname, private)
     if args.save:
         SAVED.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(SAVED, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

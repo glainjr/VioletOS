@@ -161,6 +161,12 @@ test-moto-radio: moto
 test-moto-ip-live: moto
 	$(PYTHON) targets/moto-g-pure/test_ip_live.py
 
+# moto-wifi-profile on the Mac alone, with a stand-in for build/moto-package:
+# what it sends the handset and saves for each setting. Needs no phone.
+.PHONY: test-moto-wifi-profile
+test-moto-wifi-profile:
+	$(PYTHON) services/usb-diagnostics/host/test_wifi_profile.py
+
 # A Mac bitchat peer for over-the-air tests of apps/open/bitchat. macOS keeps
 # its Bluetooth grant across rebuilds while it is signed with one identity:
 # BITCHAT_PEER_IDENTITY, by default the first Apple Development identity (else ad hoc).
