@@ -134,23 +134,33 @@ int main(int argc,char **argv) {
             rc=transfer(chosen,0xc0,0x64,0,b,8) || memcmp(b,"VSW1",4);
             if (!rc) printf("Saved stopwatch: %u.%u seconds\n",word(b+4)/10,word(b+4)%10);
         } else if (!strcmp(argv[1],"join-wifi")) {
-            uint32_t token=arc4random_uniform(UINT32_MAX)+1;
-            token&=0x7fffffffu;
-            if (!token) token=1;
-            unsigned char result[44];
-            if (!transfer(chosen,0x40,0x6c,token,NULL,0)) {
-                time_t until=time(NULL)+(getenv("MOTO_WIFI_WAIT") ? atoi(getenv("MOTO_WIFI_WAIT")) : 85);
-                while(time(NULL)<until) {
-                    if(transfer(chosen,0xc0,0x58,0,result,sizeof result)) break;
-                    unsigned state=word(result+4);
-                    if(word(result)==token && state) {
-                        if(state==1) {printf("Moto HTTPS UUID: %.36s\n",(char *)result+8);rc=0;}
-                        else fprintf(stderr,"Moto Wi-Fi step failed (%u)\n",state);
-                        break;
+            // A step the handset reports as failed is tried again, a second later (a lost
+            // handshake frame looks like a wrong key): MOTO_WIFI_TRIES joins in a row, 3 by default.
+            int tries=getenv("MOTO_WIFI_TRIES") ? atoi(getenv("MOTO_WIFI_TRIES")) : 3;
+            for (int attempt=1;;attempt++) {
+                unsigned failed=0;
+                uint32_t token=arc4random_uniform(UINT32_MAX)+1;
+                token&=0x7fffffffu;
+                if (!token) token=1;
+                unsigned char result[44];
+                if (!transfer(chosen,0x40,0x6c,token,NULL,0)) {
+                    time_t until=time(NULL)+(getenv("MOTO_WIFI_WAIT") ? atoi(getenv("MOTO_WIFI_WAIT")) : 85);
+                    while(time(NULL)<until) {
+                        if(transfer(chosen,0xc0,0x58,0,result,sizeof result)) break;
+                        unsigned state=word(result+4);
+                        if(word(result)==token && state) {
+                            if(state==1) {printf("Moto HTTPS UUID: %.36s\n",(char *)result+8);rc=0;}
+                            else {fprintf(stderr,"Moto Wi-Fi step failed (%u)\n",state);failed=state;}
+                            break;
+                        }
+                        usleep(250000);
                     }
-                    usleep(250000);
+                    if(time(NULL)>=until) fputs("Timed out waiting for the handset Wi-Fi result\n",stderr);
                 }
-                if(time(NULL)>=until) fputs("Timed out waiting for the handset Wi-Fi result\n",stderr);
+                // Not after a timeout or a USB error, and not without a key (50), which cannot succeed.
+                if (!failed || failed==50 || attempt>=tries) break;
+                fprintf(stderr,"Joining again (%d of %d)\n",attempt+1,tries);
+                sleep(1);
             }
         } else if (!strcmp(argv[1],"bt-state")) {
             // Radio's Bluetooth words (targets/moto-g-pure/bt.rs), then the first bytes the controller sent.
