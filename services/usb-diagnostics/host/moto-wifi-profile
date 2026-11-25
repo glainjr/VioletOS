@@ -46,12 +46,19 @@ def main():
     if not sys.stdin.isatty():
         raise SystemExit("Run from an interactive terminal to enter a Wi-Fi passphrase privately")
     warnings.simplefilter("error", getpass.GetPassWarning)
-    ssid = input("Wi-Fi network name: ").encode("utf-8")
+
+    sys.stderr.write("Automate wifi setup - shell source a file that contains VIOLET_SSID=<ssid> VIOLET_WIFIPASS=<password> to automate wifi setup\n")
+
+    # SSID
+    ssid = (os.environ.get("VIOLET_SSID") or input("Wi-Fi network name: ")).encode("utf-8")
     if not 1 <= len(ssid) <= 32:
-        raise SystemExit("SSID must be 1–32 bytes")
-    password = getpass.getpass("Wi-Fi password: ").encode("ascii")
+        raise SystemExit("VIOLET_SSID must be 1–32 bytes")
+
+    # WIFI PASS
+    password = (os.environ.get("VIOLET_WIFIPASS") or getpass.getpass("Wi-Fi password: ")).encode("ascii")
     if not 8 <= len(password) <= 63 or not all(32 <= b <= 126 for b in password):
         raise SystemExit("Use an 8–63 character WPA2 passphrase")
+
     pmk = hashlib.pbkdf2_hmac("sha1", password, ssid, 4096, 32)
     provision(ssid, pmk)
     print("Profile provisioned for this boot.")
