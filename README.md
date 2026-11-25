@@ -28,6 +28,7 @@ The look is dark layered paper with cream icons pressed into it ([paper.rs](apps
 | `make` or `make moto` | The handset image at `build/sel4/moto/boot.img`. This command builds locally; installing it is a separate step (see [Handset](#handset)). |
 | `make moto-debug` | Reads handset status over USB. See [USB Diagnostics](services/usb-diagnostics/README.md). |
 | `make bitchat-peer` | A Mac bitchat peer for testing the handset's [bitchat](apps/open/bitchat/README.md) app over Bluetooth. |
+| `make showphone` | Shows whether the connected handset is in the bootloader (fastboot), Android (adb) or VioletOS. |
 
 ### Prerequisites
 
