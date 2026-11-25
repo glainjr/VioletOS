@@ -26,6 +26,8 @@ int radio_random(unsigned char *out, size_t n) {
   arc4random_buf(out, n);
   return 0;
 }
+// The IP client polls the supplicant's timers; there is no supplicant here.
+void station_wpa_poll(void) {}
 static void socket_changed(slirp_os_socket fd, void *opaque) {}
 static void noop(void *unused) {}
 static void error(const char *msg, void *unused) {
