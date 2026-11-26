@@ -219,6 +219,9 @@ int station_relay_info(unsigned char *password, unsigned *len) {
   *len = relay_password_len;
   return 1;
 }
+// The DHCP client of RFC 2131 §4.4 (docs/references/rfc2131.txt). Its states and
+// the rules it keeps are modelled in docs/formal/dhcp; ip/test_dhcp.c holds this
+// code to them.
 int station_net_join(const unsigned char *mac) {
   station_net_close();
   failed = 0;
@@ -237,7 +240,8 @@ int station_net_join(const unsigned char *mac) {
   netif_set_link_up(&iface);
   unsigned start = sys_now();
   if (dhcp_start(&iface) == ERR_OK) {
-    // Some networks take well over 15 s to offer an address.
+    // Some networks take well over 15 s to offer an address. lwIP asks at 0, 2,
+    // 6 and 14 s within this wait (four_tries in docs/formal/dhcp/DhcpClient.lean).
     while (!failed && sys_now() - start < 30000) {
       station_net_poll();
       if (!failed && dhcp_supplied_address(&iface))

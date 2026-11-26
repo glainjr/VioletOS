@@ -6,6 +6,13 @@
 #define LWIP_NETCONN 0
 #define LWIP_STATS 0
 #define LWIP_DHCP 1
+// Use a leased address as soon as the server grants it. RFC 2131 §3.1 step 5
+// says a client SHOULD first check that nothing else holds it. lwIP's check
+// (RFC 5227 §2.1.1) took 6–9 s of the 30 s a join allows and, as that RFC
+// requires, gives the address up on any ARP packet naming it, which an access
+// point that answers ARP for the phone sends every time. The cost, and why
+// such a join cannot succeed: NoCheckInUse and CheckProxyArp in docs/formal/dhcp.
+#define LWIP_DHCP_DOES_ACD_CHECK 0
 #define LWIP_DNS 1
 #define LWIP_DNS_SECURE 7
 #define LWIP_IPV6 0

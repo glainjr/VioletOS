@@ -167,6 +167,18 @@ test-moto-ip-live: moto
 test-moto-wifi-profile:
 	$(PYTHON) services/usb-diagnostics/host/test_wifi_profile.py
 
+# The handset's DHCP client against a scripted network on a virtual clock: no
+# answer, a late offer, a refusal, a dead link, a lease that runs out.
+# Needs no network and takes seconds.
+.PHONY: test-moto-dhcp
+test-moto-dhcp: moto
+	$(PYTHON) targets/moto-g-pure/test_dhcp.py
+
+# The DHCP client's models (docs/formal/dhcp): Lean proofs, and TLA+ checked by TLC.
+.PHONY: check-dhcp-model
+check-dhcp-model:
+	$(PYTHON) docs/formal/dhcp/check.py
+
 # A Mac bitchat peer for over-the-air tests of apps/open/bitchat. macOS keeps
 # its Bluetooth grant across rebuilds while it is signed with one identity:
 # BITCHAT_PEER_IDENTITY, by default the first Apple Development identity (else ad hoc).
