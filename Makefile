@@ -177,7 +177,12 @@ test-moto-dhcp: moto
 # The DHCP client's models (docs/formal/dhcp): Lean proofs, and TLA+ checked by TLC.
 .PHONY: check-dhcp-model
 check-dhcp-model:
-	$(PYTHON) docs/formal/dhcp/check.py
+	$(PYTHON) docs/formal/check.py dhcp
+
+# The Wi-Fi path from radio power to an open TCP connection (docs/formal/stack), the same way.
+.PHONY: check-stack-model
+check-stack-model:
+	$(PYTHON) docs/formal/check.py stack
 
 # A Mac bitchat peer for over-the-air tests of apps/open/bitchat. macOS keeps
 # its Bluetooth grant across rebuilds while it is signed with one identity:
