@@ -188,7 +188,7 @@ leave_to_home()
 open_icon("settings")
 until("Settings", lambda: "settings: ready" in everything(), 60)
 time.sleep(1)
-tap(360, 250 + 4 * 124 + 54)
+tap(360, 250 + 5 * 124 + 54)  # Settings' Agent Apps row
 until("Agent Apps", lambda: "settings: AgentApps" in everything())
 time.sleep(1)
 # Example was the first installed app. The Python runtime is hidden.

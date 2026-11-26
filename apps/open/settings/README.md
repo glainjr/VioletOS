@@ -4,6 +4,7 @@ One app for the phone's settings, opened from its icon on Home:
 
 - **Wi-Fi** (below).
 - **Bluetooth**: whether the controller is on, and whether Bitchat is using it.
+- **Radios**: every radio in the phone, each a card with its name, an **i** that says what it does and what Off really means, and a switch. Wi-Fi off powers the connectivity chip down (no scanning, rejoining or Phone Internet); Bluetooth off resets the controller and keeps every app off it. Cellular and GPS show locked off: VioletOS has no driver for either and never starts them. **All off** turns off both Wi-Fi and Bluetooth. The choice survives a restart (`radios` in [`/dev/violet/sys`](../../../runtime/open/README.md)).
 - **Phone Link**: Violet Shield's link to your iPhone, and Phone Internet: a pairing code to type into Violet Relay, **Turn on**/**Turn off** and **New code**. The choice and code are kept in `/data/relay`, and the Open Runtime turns Phone Internet back on after a restart.
 - **Date & Time**: the city whose date Home shows (the shared setting `time.city`).
 - **Agent Apps**: every app Violet Agent installed, with its size; **Delete** (tap twice to confirm) removes one, **Delete all** removes them all.

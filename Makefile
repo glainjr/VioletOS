@@ -101,6 +101,9 @@ test-unit:
 	@printf '#![no_std]\nextern crate alloc;\nextern crate std;\n#[path = "../../runtime/open/inflate.rs"]\nmod inflate;\n' > build/tests/inflate_test.rs
 	"$(HOST_RUSTC)" --edition=2021 --test -O build/tests/inflate_test.rs -o build/tests/inflate
 	build/tests/inflate
+	@printf '#![no_std]\n#![allow(dead_code)]\nextern crate alloc;\nextern crate std;\n#[path = "../../runtime/open/radios.rs"]\nmod radios;\n' > build/tests/radios_test.rs
+	"$(HOST_RUSTC)" --edition=2021 --test -O build/tests/radios_test.rs -o build/tests/radios
+	build/tests/radios
 	python3 apps/lib/python/test_violet.py
 	cd apps && RUSTC="$(abspath $(HOST_RUSTC))" "$(abspath $(HOST_CARGO))" test --release --locked --lib --bins -p violet -p home -p settings -p bitchat --target-dir ../build/host-tests
 

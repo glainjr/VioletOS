@@ -51,6 +51,8 @@ pub struct State {
     pub hosting: bool,
     /// The last request and its outcome: ("join", false, reason).
     pub last: Option<(String, bool, u32)>,
+    /// Settings › Radios has Wi-Fi off: no scans or joins until it is on.
+    pub off: bool,
 }
 
 fn unhex(s: &str) -> Option<Vec<u8>> {
@@ -76,6 +78,7 @@ pub fn state() -> State {
             "" | "-" => None,
             what => Some((what.to_string(), get("result") == "ok", get("reason").parse().unwrap_or(0))),
         },
+        off: get("radio") == "off",
     }
 }
 

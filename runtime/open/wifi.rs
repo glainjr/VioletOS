@@ -10,6 +10,10 @@
 //!   wifi join ID [PMK]      join a network; PMK is 64 hex digits for WPA2
 //!   wifi leave              leave the joined network
 //!
+//! While Settings › Radios has Wi-Fi off (radios.rs), scan, join and
+//! "relay on" answer "error off", the state says radio=off, and neither the
+//! auto-connector nor Phone Internet's restore runs.
+//!
 //! Saved networks rejoin on their own: the Wi-Fi app keeps them in
 //! /data/networks (most recently joined first), and the auto-connector here
 //! scans and joins the first one in range a few seconds after boot, and again
@@ -74,7 +78,11 @@ pub struct Wifi {
     /// whether the saved choice was restored after boot.
     relay: Option<(u32, u32, u32)>,
     relay_restored: bool,
+    /// Settings › Radios turned Wi-Fi off (radios.rs).
+    off: bool,
 }
+
+const OFF: &str = "error off: Wi-Fi is turned off in Settings › Radios\n";
 
 /// The Phone Internet pairing Settings keeps: "on CODE" or "off CODE".
 pub const RELAY_SAVED: &str = "/data/relay";
@@ -208,9 +216,35 @@ impl Wifi {
         String::from("ok\n")
     }
 
+    /// Settings › Radios turns Wi-Fi off or on. Off drops whatever was waiting
+    /// and asks Radio to leave, which ends Phone Internet too and powers the
+    /// connectivity chip down; on lets the auto-connector look again.
+    pub fn set_off(&mut self, off: bool) {
+        if off == self.off {
+            return;
+        }
+        self.off = off;
+        if off {
+            // Radio answers OFFLINE when nothing runs; as the auto-connector's
+            // own request, that is not reported to the Wi-Fi app as a failed leave.
+            self.queue.clear();
+            self.auto_job = true;
+            self.queue.push_back((Step::Leave, Message::new(EXECUTE, PROFILE, 0)));
+            self.relay = None;
+            self.poll();
+        } else {
+            self.auto.tries = 0;
+            self.auto.skip.clear();
+            self.auto.next_ns = 1;
+        }
+    }
+
     /// The auto-connector's turn, from the runtime's poll (every 50 ms or so).
     pub fn tick(&mut self, fs: &Fs, now: u64) {
         self.poll();
+        if self.off {
+            return;
+        }
         if self.auto.next_ns == 0 {
             self.auto.next_ns = now + FIRST_LOOK_NS;
         }
@@ -357,10 +391,12 @@ impl Wifi {
                 }
                 let ssid = if self.connected != 0 && self.name.0 == self.connected { hex(&self.name.1) } else { String::new() };
                 format!(
-                    "state={} connected={} ssid={} hosting={} last={} result={} reason={}\n",
-                    state, self.connected, ssid, (self.connected == HOSTING) as u32, last, result, reason
+                    "state={} connected={} ssid={} hosting={} last={} result={} reason={} radio={}\n",
+                    state, self.connected, ssid, (self.connected == HOSTING) as u32, last, result, reason,
+                    if self.off { "off" } else { "on" }
                 )
             }
+            Some("scan" | "join") if self.off => String::from(OFF),
             Some("scan") => self.start(&[(Step::Scan, Message::new(EXECUTE, RADIO, 1))]),
             Some("list") => {
                 self.poll();
@@ -472,6 +508,7 @@ impl Wifi {
                 };
                 format!("state={} failure={}\n", state, self.relay.map_or(0, |r| r.2))
             }
+            Some("on") if self.off => String::from(OFF),
             Some("on") => {
                 let Some(code) = words.next().filter(|c| valid_relay_code(c.as_bytes())) else {
                     return String::from("error usage: relay on CODE (12 of 0-9 A-F)\n");

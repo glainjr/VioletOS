@@ -28,9 +28,23 @@ fn rx_byte(at: u32) -> u8 {
 }
 
 static OPEN: AtomicBool = AtomicBool::new(false);
+/// Settings › Radios turned Bluetooth off (radios.rs).
+static BLOCKED: AtomicBool = AtomicBool::new(false);
 
+/// The controller is on and Bluetooth is not turned off in Settings › Radios.
 pub fn up() -> bool {
-    get(0) == MAGIC && get(1) == ON
+    !blocked() && get(0) == MAGIC && get(1) == ON
+}
+pub fn blocked() -> bool {
+    BLOCKED.load(Ordering::Relaxed)
+}
+/// Settings › Radios turns Bluetooth off or on. Off resets the controller, so
+/// it stops anything an app had it doing, and no app may open it meanwhile.
+pub fn set_blocked(off: bool) {
+    if off && !blocked() && get(0) == MAGIC && get(1) == ON {
+        send(&[1, 0x03, 0x0c, 0]);
+    }
+    BLOCKED.store(off, Ordering::Relaxed);
 }
 /// Claims the controller. Events that arrived before are dropped.
 /// Whether an app has /dev/violet/hci open.

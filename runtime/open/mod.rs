@@ -25,6 +25,7 @@ pub mod guard;
 #[path = "../../services/sentinel/mod.rs"]
 pub mod sentinel;
 pub mod pool;
+pub mod radios;
 #[path = "../../system/supervisor/procmgr.rs"]
 pub mod procmgr;
 pub mod syscall;
@@ -218,6 +219,9 @@ pub struct Runtime {
     last_sentinel: u64,
     /// The "wifi" commands' running Radio requests.
     pub wifi: wifi::Wifi,
+    /// Settings › Radios (radios.rs), and whether /data/radios was applied yet.
+    pub radios: radios::Radios,
+    radios_loaded: bool,
     /// Present cost, input-to-frame latency and touch polling (frames.rs).
     pub frames: frames::Frames,
     /// The panel's scan line and frame count (scanout.rs).
@@ -323,6 +327,8 @@ impl Runtime {
             tx_stats: (0..net::SLOTS).map(|_| None).collect(),
             last_sentinel: 0,
             wifi: wifi::Wifi::default(),
+            radios: radios::Radios::default(),
+            radios_loaded: false,
             frames: frames::Frames::default(),
             beam: scanout::Beam::default(),
             ring: touch::Ring::default(),
@@ -853,6 +859,12 @@ impl Runtime {
     fn poll_runtime(&mut self) {
         let t0 = sys::now_ns();
         data::flush(&mut self.fs);
+        if !self.radios_loaded {
+            // Before the auto-connector or Phone Internet first look.
+            self.radios_loaded = true;
+            let saved = self.fs.contents(radios::SAVED).map(|d| String::from_utf8_lossy(d).into_owned()).unwrap_or_default();
+            self.apply_radios(radios::Radios::parse(&saved));
+        }
         self.wifi.tick(&self.fs, t0);
         self.usb_requests();
         self.usb_installs();

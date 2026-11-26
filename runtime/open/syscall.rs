@@ -629,12 +629,18 @@ impl Runtime {
                     _ => (a[0] as i32, a[1], a[2] & 0x200 != 0),
                 };
                 let p = match self.at(i, dirfd, ptr) { Ok(p) => p, Err(e) => return Done(e) };
+                if !super::radios::app_may_write(&p) {
+                    return Done(EACCES);
+                }
                 Done(match self.fs.unlink(&p, dir) { Ok(()) => 0, Err(e) => e })
             }
             38 | 329 | 382 => {
                 let (fa, fp, ta, tp) = if n == 38 { (AT_FDCWD, a[0], AT_FDCWD, a[1]) } else { (a[0] as i32, a[1], a[2] as i32, a[3]) };
                 let from = match self.at(i, fa, fp) { Ok(p) => p, Err(e) => return Done(e) };
                 let to = match self.at(i, ta, tp) { Ok(p) => p, Err(e) => return Done(e) };
+                if !super::radios::app_may_write(&from) || !super::radios::app_may_write(&to) {
+                    return Done(EACCES);
+                }
                 Done(match self.fs.rename(&from, &to) { Ok(()) => 0, Err(e) => e })
             }
             85 | 332 => {
@@ -660,6 +666,9 @@ impl Runtime {
                 } else {
                     match self.at(i, AT_FDCWD, a[0]) { Ok(p) => p, Err(e) => return Done(e) }
                 };
+                if !super::radios::app_may_write(&path) {
+                    return Done(EACCES);
+                }
                 let now = (self.clock(0) / 1_000_000_000) as u32;
                 match self.fs.writable(&path, false, false, now) {
                     Some(data) => {
@@ -920,6 +929,9 @@ impl Runtime {
                 Kind::Mic { seen: super::device::mic::open() }
             }
             "/dev/violet/hci" => {
+                if super::hci::blocked() {
+                    return Done(EACCES);
+                }
                 if !super::hci::open() {
                     return Done(EBUSY);
                 }
@@ -947,6 +959,9 @@ impl Runtime {
                         let wants_write = flags & O_ACCMODE != 0 || flags & O_TRUNC != 0;
                         if existing.is_none() && flags & O_CREAT == 0 {
                             return Done(ENOENT);
+                        }
+                        if (wants_write || existing.is_none()) && !super::radios::app_may_write(&path) {
+                            return Done(EACCES);
                         }
                         if wants_write || existing.is_none() {
                             if self.fs.writable(&path, flags & O_CREAT != 0, flags & O_TRUNC != 0, now).is_none() {

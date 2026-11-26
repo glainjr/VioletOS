@@ -78,7 +78,10 @@ if STAGE == "second":
     print("settings: Tokyo kept across the restart", file=sys.stderr)
     sys.exit(0)
 time.sleep(1)
-menu(3)  # Date & Time
+menu(2)  # Radios
+until("Radios opens", lambda: "settings: Radios" in everything())
+back_to_menu("back on the menu from Radios")
+menu(4)  # Date & Time
 until("Date & Time opens", lambda: "settings: Time" in everything())
 tap(195, 250 + 8 * 118 + 51)  # Tokyo, the left column's ninth row
 until("Tokyo chosen", lambda: "settings: time city Tokyo" in everything())
@@ -87,7 +90,7 @@ menu(0)  # Wi-Fi
 until("Wi-Fi scans", lambda: "wifi: found" in everything(), 30)
 print("settings:", [l for l in everything().splitlines() if "wifi: found" in l][-1], file=sys.stderr)
 back_to_menu("back on the menu again")
-menu(4)  # Agent Apps
+menu(5)  # Agent Apps
 until("Agent Apps opens", lambda: "settings: AgentApps" in everything())
 back_to_menu("back on the menu once more")
 back()  # ‹ Home

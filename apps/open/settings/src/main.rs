@@ -28,6 +28,7 @@ fn status() -> Status {
     let sh = violet::fields(&violet::sys("shield"));
     let bt = violet::fields(&violet::sys("bluetooth"));
     let st = violet::fields(&violet::sys("status"));
+    let radios = violet::fields(&violet::sys("radios"));
     Status {
         wifi: wifi::App::summary(),
         bt_on: bt.get("on").is_some_and(|v| v == "1"),
@@ -43,6 +44,8 @@ fn status() -> Status {
         volume: st.get("volume").and_then(|v| v.parse().ok()).unwrap_or(-1),
         city: violet::sys("get time.city").parse().ok().filter(|&n: &usize| n < CITIES.len()).unwrap_or(0),
         installed: pages::parse_installed(&violet::sys("installed")),
+        radio_wifi: radios.get("wifi").is_none_or(|v| v != "off"),
+        radio_bluetooth: radios.get("bluetooth").is_none_or(|v| v != "off"),
     }
 }
 
@@ -142,8 +145,24 @@ impl App {
                 self.uninstall(&all);
             }
             Hit::Delete(i) => self.confirm = Some(i),
+            Hit::Info(i) => self.confirm = if self.confirm == Some(i) { None } else { Some(i) },
+            Hit::Switch(i) => {
+                let r = pages::RADIOS[i];
+                let key = if r == pages::Radio::Wifi { "wifi" } else { "bluetooth" };
+                let to = if self.status.radio_on(r) { "off" } else { "on" };
+                self.radios(&format!("radios {key} {to}"));
+            }
+            Hit::AllOff => self.radios("radios all off"),
             Hit::DeleteAll => self.confirm = Some(usize::MAX),
         }
+    }
+
+    /// A Settings › Radios change; the runtime answers with the radios' new state.
+    fn radios(&mut self, command: &str) {
+        let answer = violet::sys(command);
+        println!("settings: {command} -> {answer}");
+        self.note = if answer.starts_with("error") { "Couldn't change the radio".into() } else { String::new() };
+        self.refresh();
     }
 
     fn uninstall(&mut self, apps: &[pages::Installed]) {
@@ -272,6 +291,7 @@ mod preview {
             wifi: "LouieDog".into(), bt_on: true, bt_open: false, shield_known: true, shield_linked: true, shield_rules: 3,
             frozen: vec![], relay: "off".into(), relay_failure: 0, battery: 82, volume: 8, city: 1,
             installed: pages::parse_installed("scorekeeper\t412345\tScorekeeper\ntips\t300000\tTip Calculator\n"),
+            radio_wifi: true, radio_bluetooth: false,
         }
     }
 
@@ -290,7 +310,7 @@ mod preview {
         let fonts = Fonts::load();
         let s = status();
         let mut c = Canvas::new(violet::W, violet::H);
-        for (name, section) in [("menu", Section::Menu), ("bluetooth", Section::Bluetooth), ("phone", Section::PhoneLink),
+        for (name, section) in [("menu", Section::Menu), ("bluetooth", Section::Bluetooth), ("radios", Section::Radios), ("phone", Section::PhoneLink),
                                 ("time", Section::Time), ("apps", Section::AgentApps), ("about", Section::About)] {
             let v = pages::View { section, status: &s, code: "3FA94C0B17DE", relay_on: false, pressed: None, confirm: Some(1), note: "" };
             pages::draw(&mut c, &fonts, &v);

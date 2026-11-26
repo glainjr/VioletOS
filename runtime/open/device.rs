@@ -552,6 +552,15 @@ impl Runtime {
     pub fn background_listener(&self) -> Option<usize> {
         (0..MAX_APPS).find(|&n| self.apps[n].as_ref().is_some_and(|a| a.path == super::appstore::INSTALLER) && self.holds_mic(n))
     }
+    /// Turns radios on or off as Settings › Radios says (radios.rs).
+    pub fn apply_radios(&mut self, r: super::radios::Radios) {
+        if r != self.radios {
+            crate::log!("radios: wifi {} bluetooth {}", r.wifi as u8, r.bluetooth as u8);
+        }
+        self.radios = r;
+        self.wifi.set_off(!r.wifi);
+        super::hci::set_blocked(!r.bluetooth);
+    }
     pub fn lifecycle(&mut self, i: usize, value: i32) {
         let now = sys::now_ns() / 1000;
         if value == LIFECYCLE_FOCUS_LOST && self.audio {
@@ -1096,6 +1105,26 @@ impl Runtime {
             }
             // Bluetooth: whether the controller is on, and whether an app has its HCI open.
             Some("bluetooth") => alloc::format!("on={} open={}\n", super::hci::up() as u32, super::hci::is_open() as u32),
+            // Settings › Radios (runtime/open/radios.rs).
+            Some("radios") => match words.next() {
+                None => self.radios.report(),
+                Some(_) if self.apps[i].as_ref().map_or(true, |a| a.path != super::wifi::SETTINGS_APP) => {
+                    String::from("error denied: only Settings changes the radios\n")
+                }
+                Some(what) => match words.next().and_then(|state| self.radios.change(what, state)) {
+                    Some(next) => {
+                        self.apply_radios(next);
+                        match self.fs.writable(super::radios::SAVED, true, true, 0) {
+                            Some(f) => {
+                                f.extend_from_slice(next.text().as_bytes());
+                                self.radios.report()
+                            }
+                            None => String::from("error couldn't save the choice\n"),
+                        }
+                    }
+                    None => String::from("error usage: radios [wifi|bluetooth on|off | all off]\n"),
+                },
+            },
             // Phone Internet (runtime/open/wifi.rs).
             Some("relay") => {
                 let path = self.apps[i].as_ref().map_or(String::new(), |a| a.path.clone());

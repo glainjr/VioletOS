@@ -176,7 +176,9 @@ impl App {
     /// The joined network's name, or Phone Internet, for the Settings menu.
     pub fn summary() -> String {
         let s = wifi::state();
-        if s.hosting {
+        if s.off {
+            "Off".into()
+        } else if s.hosting {
             "Phone Internet".into()
         } else if s.connected != 0 && !s.ssid.is_empty() {
             String::from_utf8_lossy(&s.ssid).into_owned()
@@ -220,6 +222,7 @@ impl App {
                 println!("wifi: scanning");
             }
             Err(e) if e == "busy" => {} // the runtime is already rejoining a saved network
+            Err(e) if e.starts_with("off") => self.message = Some("Wi-Fi is off. Turn it on in Settings › Radios.".into()),
             Err(e) => self.message = Some(format!("Couldn't scan: {e}")),
         }
     }

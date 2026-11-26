@@ -8,6 +8,7 @@ pub enum Section {
     Menu,
     Wifi,
     Bluetooth,
+    Radios,
     PhoneLink,
     Time,
     AgentApps,
@@ -15,9 +16,10 @@ pub enum Section {
 }
 
 /// The menu, in order.
-pub const MENU: [(Section, &str); 6] = [
+pub const MENU: [(Section, &str); 7] = [
     (Section::Wifi, "Wi-Fi"),
     (Section::Bluetooth, "Bluetooth"),
+    (Section::Radios, "Radios"),
     (Section::PhoneLink, "Phone Link"),
     (Section::Time, "Date & Time"),
     (Section::AgentApps, "Agent Apps"),
@@ -34,6 +36,44 @@ pub enum Hit {
     City(usize),
     Delete(usize),
     DeleteAll,
+    /// Radios: a radio's switch and its i, and All off.
+    Switch(usize),
+    Info(usize),
+    AllOff,
+}
+
+/// The radios, as Settings › Radios lists them.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Radio {
+    Wifi,
+    Bluetooth,
+    Cellular,
+    Gps,
+}
+pub const RADIOS: [Radio; 4] = [Radio::Wifi, Radio::Bluetooth, Radio::Cellular, Radio::Gps];
+
+impl Radio {
+    pub fn name(self) -> &'static str {
+        match self {
+            Radio::Wifi => "Wi-Fi",
+            Radio::Bluetooth => "Bluetooth",
+            Radio::Cellular => "Cellular",
+            Radio::Gps => "GPS",
+        }
+    }
+    /// What it does, and what Off really means, for its i.
+    pub fn about(self) -> &'static str {
+        match self {
+            Radio::Wifi => "Joins Wi-Fi networks and hosts Phone Internet. Off: Radio leaves the network, stops Phone Internet and powers the connectivity chip down. Nothing scans or rejoins until you turn it on. Bluetooth shares the chip, so it goes quiet too.",
+            Radio::Bluetooth => "Lets apps such as Bitchat talk to devices nearby. Off: the controller is reset, so it stops advertising and scanning, and no app can use it. It shares the chip with Wi-Fi, which keeps it powered while Wi-Fi is on. Turn Wi-Fi off to power it down.",
+            Radio::Cellular => "Calls, texts and mobile data. VioletOS has no driver for the modem and never starts it, so it stays off. Phone Internet borrows your iPhone's cellular data over Wi-Fi instead.",
+            Radio::Gps => "Satellite location. VioletOS has no driver for it and never turns it on, so no app can learn where you are from it.",
+        }
+    }
+    /// VioletOS can switch it; the others are always off.
+    pub fn switchable(self) -> bool {
+        matches!(self, Radio::Wifi | Radio::Bluetooth)
+    }
 }
 
 /// An app Violet Agent installed.
@@ -75,6 +115,19 @@ pub struct Status {
     pub volume: i32,
     pub city: usize,
     pub installed: Vec<Installed>,
+    /// Settings › Radios: Wi-Fi and Bluetooth allowed on ("radios" in /dev/violet/sys).
+    pub radio_wifi: bool,
+    pub radio_bluetooth: bool,
+}
+
+impl Status {
+    pub fn radio_on(&self, r: Radio) -> bool {
+        match r {
+            Radio::Wifi => self.radio_wifi,
+            Radio::Bluetooth => self.radio_bluetooth,
+            Radio::Cellular | Radio::Gps => false,
+        }
+    }
 }
 
 pub struct View<'a> {
@@ -84,7 +137,8 @@ pub struct View<'a> {
     pub code: &'a str,
     pub relay_on: bool,
     pub pressed: Option<Hit>,
-    /// The app whose Delete was tapped once (usize::MAX: Delete all).
+    /// The app whose Delete was tapped once (usize::MAX: Delete all); on
+    /// Radios, the radio whose i is open.
     pub confirm: Option<usize>,
     pub note: &'a str,
 }
@@ -118,6 +172,23 @@ pub fn delete_rect(i: usize) -> Rect {
     Rect::new(r.x1 - 196, r.y0 + 20, r.x1 - 20, r.y1 - 20)
 }
 pub const DELETE_ALL: Rect = Rect::new(40, 1300, W as i32 - 40, 1400);
+const RADIO_TOP: i32 = 250;
+const RADIO_ROW: i32 = 150;
+pub fn radio_rect(i: usize) -> Rect {
+    let y = RADIO_TOP + i as i32 * RADIO_ROW;
+    Rect::new(40, y, W as i32 - 40, y + RADIO_ROW - 20)
+}
+pub fn switch_rect(i: usize) -> Rect {
+    let r = radio_rect(i);
+    let y = r.y0 + (r.height() - 56) / 2;
+    Rect::new(r.x1 - 32 - violet::paper::SWITCH_W, y, r.x1 - 32, y + 56)
+}
+pub fn info_rect(i: usize) -> Rect {
+    let s = switch_rect(i);
+    let cy = (s.y0 + s.y1) / 2;
+    Rect::new(s.x0 - 96, cy - 34, s.x0 - 28, cy + 34)
+}
+pub const ALL_OFF: Rect = Rect::new(40, 1440, W as i32 - 40, 1540);
 
 pub fn hit(v: &View, x: i32, y: i32) -> Option<Hit> {
     if HOME_BOX.contains(x, y) {
@@ -135,6 +206,20 @@ pub fn hit(v: &View, x: i32, y: i32) -> Option<Hit> {
             }
         }
         Section::Time => (0..CITIES.len()).find(|&i| city_rect(i).contains(x, y)).map(Hit::City),
+        Section::Radios => {
+            if ALL_OFF.contains(x, y) && (v.status.radio_wifi || v.status.radio_bluetooth) {
+                return Some(Hit::AllOff);
+            }
+            (0..RADIOS.len()).find_map(|i| {
+                if info_rect(i).inset(-10).contains(x, y) {
+                    Some(Hit::Info(i))
+                } else if RADIOS[i].switchable() && switch_rect(i).inset(-16).contains(x, y) {
+                    Some(Hit::Switch(i))
+                } else {
+                    None
+                }
+            })
+        }
         Section::AgentApps => {
             let n = v.status.installed.len().min(MAX_LISTED);
             if n > 0 && DELETE_ALL.contains(x, y) {
@@ -196,6 +281,15 @@ pub fn menu_value(s: &Status, section: Section) -> (String, bool) {
             (if parts.is_empty() { "Not linked".into() } else { parts.join(" · ") }, s.shield_linked || s.relay == "online")
         }
         Section::Time => (CITIES[s.city.min(CITIES.len() - 1)].into(), false),
+        Section::Radios => (
+            match (s.radio_wifi, s.radio_bluetooth) {
+                (true, true) => "Wi-Fi, Bluetooth on".into(),
+                (true, false) => "Bluetooth off".into(),
+                (false, true) => "Wi-Fi off".into(),
+                (false, false) => "All off".into(),
+            },
+            false,
+        ),
         Section::AgentApps => {
             let n = s.installed.len();
             (if n == 0 { "None".into() } else { format!("{n} installed") }, false)
@@ -228,7 +322,15 @@ pub fn draw(c: &mut Canvas, f: &Fonts, v: &View) {
             let card = Rect::new(40, 230, W as i32 - 40, 390);
             slab(c, card, 30.0, PAPER_RAISED);
             f.medium(36.0).draw(c, if s.bt_on { "On" } else { "Off" }, 80, 300, if s.bt_on { VIOLET } else { CREAM });
-            let line = if s.bt_open { "In use by Bitchat" } else if s.bt_on { "Ready for nearby chat" } else { "The radio is not running" };
+            let line = if !s.radio_bluetooth {
+                "Turned off in Settings › Radios"
+            } else if s.bt_open {
+                "In use by Bitchat"
+            } else if s.bt_on {
+                "Ready for nearby chat"
+            } else {
+                "The radio is not running"
+            };
             f.regular(27.0).draw(c, line, 80, 346, MUTED);
             paragraph(c, &f.regular(28.0), "Bluetooth shares the phone's connectivity chip with Wi-Fi, so it runs while Wi-Fi is on. Bitchat uses it to chat with phones nearby, with no internet needed.", 44, 460, W as i32 - 88, MUTED);
         }
@@ -285,6 +387,7 @@ pub fn draw(c: &mut Canvas, f: &Fonts, v: &View) {
                 f.regular(26.0).centered(c, v.note, 0, W as i32, 1290, ALERT);
             }
         }
+        Section::Radios => radios(c, f, v),
         Section::Time => {
             header(c, f, v, "‹ Settings", "Date & Time");
             f.regular(26.0).draw(c, "Home shows the date where you are", 44, 228, MUTED);
@@ -350,5 +453,60 @@ pub fn draw(c: &mut Canvas, f: &Fonts, v: &View) {
                 value.draw(c, &value.fit(v, card.x1 - 40 - 300), 300, y, CREAM);
             }
         }
+    }
+}
+
+/// Every radio in the phone, each with what it does (i) and a switch; the
+/// ones VioletOS never starts show a switch locked off.
+fn radios(c: &mut Canvas, f: &Fonts, v: &View) {
+    let s = v.status;
+    header(c, f, v, "‹ Settings", "Radios");
+    f.regular(26.0).draw(c, "Turn off any radio you don't want on.", 44, 228, MUTED);
+    let (name, small) = (f.medium(34.0), f.regular(24.0));
+    for (i, &r) in RADIOS.iter().enumerate() {
+        let card = radio_rect(i);
+        slab(c, card, 26.0, PAPER_RAISED);
+        let on = s.radio_on(r);
+        name.draw(c, r.name(), card.x0 + 32, card.y0 + 58, if r.switchable() { CREAM } else { MUTED });
+        let status = match r {
+            Radio::Wifi if on => s.wifi.clone(),
+            Radio::Wifi => "Chip powered down".into(),
+            Radio::Bluetooth if !on => "No app can use it".into(),
+            Radio::Bluetooth if !s.radio_wifi => "Quiet while Wi-Fi is off".into(),
+            Radio::Bluetooth if s.bt_open => "In use by an app".into(),
+            Radio::Bluetooth => "Ready".into(),
+            Radio::Cellular | Radio::Gps => "No driver · never started".into(),
+        };
+        small.draw(c, &small.fit(&status, info_rect(i).x0 - card.x0 - 48), card.x0 + 32, card.y0 + 100, MUTED);
+        // The i.
+        let ir = info_rect(i);
+        let open = v.confirm == Some(i);
+        let (cx, cy) = (((ir.x0 + ir.x1) / 2) as f32, ((ir.y0 + ir.y1) / 2) as f32);
+        let ring = if v.pressed == Some(Hit::Info(i)) || open { VIOLET } else { MUTED };
+        c.circle(cx, cy, 22.0, ring);
+        c.circle(cx, cy, 19.0, if open { VIOLET } else { PAPER_RAISED });
+        f.medium(28.0).centered(c, "i", ir.x0, ir.x1, cy as i32 + 10, if open { PAPER } else { CREAM });
+        let sw = switch_rect(i);
+        violet::paper::switch(c, sw.x0, sw.y0, on);
+        if !r.switchable() {
+            // Locked off: VioletOS can't turn it on.
+            c.round_rect_alpha(sw.inset(-2), 28.0, PAPER_RAISED, 0.45);
+        }
+    }
+    let top = radio_rect(RADIOS.len() - 1).y1 + 40;
+    match v.confirm.and_then(|i| RADIOS.get(i)) {
+        Some(&r) => {
+            f.medium(30.0).draw(c, r.name(), 44, top + 20, CREAM);
+            paragraph(c, &f.regular(26.0), r.about(), 44, top + 66, W as i32 - 88, MUTED);
+        }
+        None => {
+            f.regular(26.0).draw(c, "Tap i to see what a radio does and what Off means.", 44, top + 20, MUTED);
+        }
+    }
+    let any = s.radio_wifi || s.radio_bluetooth;
+    let bg = if v.pressed == Some(Hit::AllOff) { PAPER_PRESSED } else { PAPER_RAISED };
+    violet::button(c, &f.medium(32.0), ALL_OFF, if any { "All off" } else { "All radios are off" }, bg, if any { ALERT } else { MUTED });
+    if !v.note.is_empty() {
+        f.regular(26.0).centered(c, v.note, 0, W as i32, ALL_OFF.y0 - 30, ALERT);
     }
 }
