@@ -130,7 +130,7 @@ The current build ships [USB Diagnostics](../../services/usb-diagnostics/README.
 
 ## Phone relay access point
 
-`moto-wifi-profile --save` keeps the network name and derived WPA2 key (not the password) in `~/.config/violetos/wifi-profile.json`, readable only by you; `moto-flash` provisions it after every flash, and `moto-wifi-profile --saved` does so after any other reboot. DHCP may take up to 30 s.
+`moto-wifi-profile` asks for the network name and password, or takes them from `VIOLET_SSID` and `VIOLET_WIFIPASS` when they are exported: copy [wifi.rc.sample-move_to_secrets_dir_as-wifi.rc](../../wifi.rc.sample-move_to_secrets_dir_as-wifi.rc) to `secrets/wifi.rc` (git ignores `secrets/`), fill it in and `source` it. `moto-wifi-profile --save` keeps the network name and derived WPA2 key (not the password) in `~/.config/violetos/wifi-profile.json`, readable only by you; `moto-flash` provisions it after every flash, and `moto-wifi-profile --saved` does so after any other reboot. DHCP may take up to 30 s.
 
 Radio also serves open apps' TCP sockets from its event loop (see the [Open Runtime](../../runtime/open/README.md#how-it-works)). A USB join now tries every access point broadcasting the network name, 2.4 GHz first, and a join of an ordinary network while hosting the relay stops hosting first.
 

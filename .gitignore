@@ -1,2 +1,4 @@
 /build/
 __pycache__/
+# Local settings with passwords (see wifi.rc.sample-move_to_secrets_dir_as-wifi.rc).
+/secrets/

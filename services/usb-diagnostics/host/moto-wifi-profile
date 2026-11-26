@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Provision one WPA2-Personal profile over VioletOS USB, for this boot only.
 
-    moto-wifi-profile            ask for the network name and password
+    moto-wifi-profile            ask for the network name and password, or take
+                                 them from VIOLET_SSID and VIOLET_WIFIPASS
     moto-wifi-profile --save     the same, and keep the profile on this Mac
     moto-wifi-profile --saved    provision the kept profile without asking
 
@@ -47,12 +48,14 @@ def main():
         raise SystemExit("Run from an interactive terminal to enter a Wi-Fi passphrase privately")
     warnings.simplefilter("error", getpass.GetPassWarning)
 
-    sys.stderr.write("Automate wifi setup - shell source a file that contains VIOLET_SSID=<ssid> VIOLET_WIFIPASS=<password> to automate wifi setup\n")
+    if not (os.environ.get("VIOLET_SSID") and os.environ.get("VIOLET_WIFIPASS")):
+        sys.stderr.write("To skip these questions, export VIOLET_SSID and VIOLET_WIFIPASS first: "
+                         "see wifi.rc.sample-move_to_secrets_dir_as-wifi.rc\n")
 
     # SSID
     ssid = (os.environ.get("VIOLET_SSID") or input("Wi-Fi network name: ")).encode("utf-8")
     if not 1 <= len(ssid) <= 32:
-        raise SystemExit("VIOLET_SSID must be 1–32 bytes")
+        raise SystemExit("SSID must be 1–32 bytes")
 
     # WIFI PASS
     password = (os.environ.get("VIOLET_WIFIPASS") or getpass.getpass("Wi-Fi password: ")).encode("ascii")
